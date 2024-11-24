@@ -131,6 +131,7 @@ char** SplitLine(char* line)
     }
 
     tokens[position] = NULL;
+
     return tokens;
 }
 
@@ -178,9 +179,13 @@ int Launch(char** args)
     return 1;
 }
 
-int NumFunctions(char* functions[])
+int NumFunctions(char* arr[])
 {
-    return sizeof(functions) / sizeof(functions[0]);
+    int count = 0;
+    while (arr[count] != NULL)
+        count++;
+
+    return count;
 }
 
 /*
