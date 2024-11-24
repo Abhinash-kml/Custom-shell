@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <time.h>
 
 #define TOKEN_BUFFER_SIZE 64
 #define TOKEN_DELIMITERS " \t\r\n\a"
@@ -18,7 +19,7 @@ int CommandCD(char** args);
 int CommandHelp(char** args);
 int CommandExit(char** args);
 
-int NumFunctions(char* functions[]);
+int NumFunctions(char** functions[]);
 
 int (*builtinFunctions[])(char**) = {
     &CommandCD,
@@ -26,16 +27,44 @@ int (*builtinFunctions[])(char**) = {
     &CommandExit
 };
 
-char* builtinFunctionStrings[] = {
-    "cd",
-    "help",
-    "exit"
+char* commandOne[]   = {"cd", "Change Directory."};
+char* commandTwo[]   = {"help", "Show help about this shell."};
+char* commandThree[] = {"exit", "Exit the shell."};
+
+char** builtinFunctionStrings[] = {
+    commandOne,
+    commandTwo,
+    commandThree
 };
+
+FILE* errorStream;
+FILE* recordStream;
+time_t currentTime;
+
 
 int main()
 {
-    printf("Hello World\n");
+    errorStream = fopen("shell_errors.log", "a");
+    if (!errorStream)
+    {
+        printf("Error opening/creating error steam log");
+        return EXIT_FAILURE;
+    }
+
+    recordStream = fopen("shell_record.log", "a");
+    if (!recordStream)
+    {
+        printf("Error opening/creating record stream log");
+        return EXIT_FAILURE;
+    }
+        
+    printf("Welcome to Neo's terminal\n");
     UpdateLoop();
+
+    if (errorStream)
+        fclose(errorStream);
+    if (recordStream)
+        fclose(recordStream);
 }
 
 void UpdateLoop()
@@ -47,6 +76,11 @@ void UpdateLoop()
     do {
         printf("neo > ");
         line = ReadLine();
+
+        currentTime = time(NULL);
+        if (currentTime != (time_t)(-1))
+            fprintf(recordStream, "%s - %s", line, asctime(gmtime(&currentTime)));
+
         args = SplitLine(line);
         status = Execute(args);
 
@@ -142,7 +176,7 @@ int Execute(char** args)
 
     for (size_t i = 0; i < NumFunctions(builtinFunctionStrings); ++i)
     {
-        if (strcmp(args[0], builtinFunctionStrings[i]) == 0)
+        if (strcmp(args[0], builtinFunctionStrings[i][0]) == 0)
             return builtinFunctions[i](args);
     }
 
@@ -179,7 +213,7 @@ int Launch(char** args)
     return 1;
 }
 
-int NumFunctions(char* arr[])
+int NumFunctions(char** arr[])
 {
     int count = 0;
     while (arr[count] != NULL)
@@ -212,7 +246,7 @@ int CommandHelp(char** args)
     printf("The commands are prebuilt in this shell:\n");
 
     for (size_t i = 0; i < NumFunctions(builtinFunctionStrings); ++i)
-        printf("  %s\n", builtinFunctionStrings[i]);
+        printf("  %s -- %s\n", builtinFunctionStrings[i][0], builtinFunctionStrings[i][1]);
 
     printf("Use the \"man\" command for information on other programs.\n");
 
