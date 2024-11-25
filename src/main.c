@@ -5,9 +5,12 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <time.h>
+#include <signal.h>
 
 #define TOKEN_BUFFER_SIZE 64
 #define TOKEN_DELIMITERS " \t\r\n\a"
+
+void GracefullShutdown(int);
 
 void UpdateLoop();
 char* ReadLine();
@@ -57,6 +60,10 @@ int main()
         printf("Error opening/creating record stream log");
         return EXIT_FAILURE;
     }
+
+    signal(SIGINT, GracefullShutdown);
+    signal(SIGKILL, GracefullShutdown);
+    signal(SIGTERM, GracefullShutdown);
         
     printf("Welcome to Neo's terminal\n");
     UpdateLoop();
@@ -256,4 +263,17 @@ int CommandHelp(char** args)
 int CommandExit(char** args)
 {
     return 0;
+}
+
+void GracefullShutdown(int signal)
+{
+    printf("Received signal: %i.\nShutting down...", signal);
+
+    if (errorStream)
+        fclose(errorStream);
+    
+    if (recordStream)
+        fclose(recordStream);
+
+    exit(EXIT_SUCCESS);
 }
