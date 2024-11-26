@@ -15,6 +15,7 @@ void GracefullShutdown(int);
 void EnableRawMode();
 void DisableRawMode();
 char* findLastWord(char*) ;
+int get_index(char*, char);
 void AutoComplete(char*, int*);
 
 void UpdateLoop();
@@ -180,20 +181,30 @@ void AutoComplete(char* buffer, int* buffer_len)
     for (size_t i = 0; suggestions[i] != NULL; ++i)
         if (strncmp(last_word, suggestions[i], last_word_len) == 0)
         {
-            size_t suggestion_len = strlen(suggestions[i]);
-
             // Replace last word with the suggestion
             strcpy(last_word, suggestions[i]);          // This asshole copies nullterminator which wasted my 5 hrs today
-                                                        // Null terminator should not be copied in this case as printf stops printing as it encounters firse nullterminator
+
             // Update buffer length
             *buffer_len = strlen(buffer);
+                                                        // Null terminator should not be copied in this case as printf stops printing as it encounters firse nullterminator
+            buffer[*buffer_len] = ' ';                  // Manually added random char for strcopy's nonsense
+            break;
         }
-
-    buffer[*buffer_len] = ' ';              // Manually added random char for strcopy's nonsense
 
     printf("\r\033[Kneo > %s", buffer);
     fflush(stdout);
     return;
+}
+
+int get_index(char* arr, char c)
+{
+    for (const char *ptr = arr; *ptr != '\0'; ptr++) 
+    {
+        if (*ptr == c) 
+            return ptr - arr; // Return the index by calculating the pointer difference
+    }
+
+    return -1; // Return -1 if the character is not found
 }
 
 char** SplitLine(char* line)
