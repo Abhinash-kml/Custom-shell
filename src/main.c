@@ -6,11 +6,16 @@
 #include <unistd.h>
 #include <time.h>
 #include <signal.h>
+#include <termios.h>
 
 #define TOKEN_BUFFER_SIZE 64
 #define TOKEN_DELIMITERS " \t\r\n\a"
 
 void GracefullShutdown(int);
+void EnableRawMode();
+void DisableRawMode();
+char* findLastWord(char*) ;
+void AutoComplete(char*, int*);
 
 void UpdateLoop();
 char* ReadLine();
@@ -34,6 +39,8 @@ char* commandOne[]   = {"cd", "Change Directory."};
 char* commandTwo[]   = {"help", "Show help about this shell."};
 char* commandThree[] = {"exit", "Exit the shell."};
 
+char* suggestions[] = {"help", "hello", "history", "halt", "hack", NULL};
+
 char** builtinFunctionStrings[] = {
     commandOne,
     commandTwo,
@@ -43,7 +50,7 @@ char** builtinFunctionStrings[] = {
 FILE* errorStream;
 FILE* recordStream;
 time_t currentTime;
-
+struct termios orig_termios;
 
 int main()
 {
@@ -64,6 +71,8 @@ int main()
     signal(SIGINT, GracefullShutdown);
     signal(SIGKILL, GracefullShutdown);
     signal(SIGTERM, GracefullShutdown);
+
+    EnableRawMode();
         
     printf("Welcome to Neo's terminal\n");
     UpdateLoop();
@@ -72,6 +81,8 @@ int main()
         fclose(errorStream);
     if (recordStream)
         fclose(recordStream);
+
+    DisableRawMode();
 }
 
 void UpdateLoop()
@@ -114,7 +125,24 @@ char* ReadLine()
     {
         character = getchar();
 
-        if (character == EOF || character == '\n')
+        if (character == '\t')
+            AutoComplete(buffer, &position);
+        // else if (character == 10) // Enter key to execute command
+        // { 
+        //     buffer[position] = '\0';
+        //     printf("\nExecuting: %s\n> ", buffer);
+        //     position = 0;
+        //     memset(buffer, 0, bufferSize);
+        // } 
+        else if (character == 127) // Backspace key
+        { 
+            if (position > 0) 
+            {
+                buffer[--position] = '\0';
+                printf("\b \b", 3); // Erase last character
+            }
+        }
+        else if (character == EOF || character == '\n')
         {
             buffer[position] = '\0';
             return buffer;
@@ -136,6 +164,43 @@ char* ReadLine()
             }
         }
     }
+}
+
+char* findLastWord(char *buffer) {
+    char *last_space = strrchr(buffer, ' '); // Find the last space
+    return (last_space == NULL) ? buffer : last_space + 1;
+}
+
+void AutoComplete(char* buffer, int* buffer_len)
+{
+    int len = strlen(buffer);
+    char *last_word = findLastWord(buffer);
+    size_t last_word_len = strlen(last_word);
+    //printf("\n");
+
+    for (size_t i = 0; suggestions[i] != NULL; ++i)
+        if (strncmp(last_word, suggestions[i], last_word_len) == 0)
+        {
+            size_t suggestion_len = strlen(suggestions[i]);
+
+            // Replace last word with the suggestion
+            strcpy(last_word, suggestions[i]);
+
+            // Update buffer length
+            *buffer_len = strlen(buffer);
+        }
+
+        // {
+        //     strcpy(buffer, suggestions[i]);
+        //     *buffer_len = strlen(suggestions[i]);
+        // }
+
+            
+    //printf("\n%s", buffer); // Redisplay current input
+    //printf("%s", buffer); // Redisplay current input
+    printf("\r\033[Kneo > %s", buffer);
+    //fflush(stdout);
+    return;
 }
 
 char** SplitLine(char* line)
@@ -276,4 +341,20 @@ void GracefullShutdown(int signal)
         fclose(recordStream);
 
     exit(EXIT_SUCCESS);
+}
+
+void EnableRawMode()
+{
+    struct termios raw;
+    tcgetattr(STDIN_FILENO, &orig_termios);     // Get current terminal attributes
+    raw = orig_termios;
+    //raw.c_lflag &= ~(ECHO | ICANON);            // disable canonical mode and echo
+    raw.c_lflag &= ~ICANON;            // disable canonical mode and echo
+
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);   // Apply changes
+}
+
+void DisableRawMode()
+{
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);  // Restore original settings
 }

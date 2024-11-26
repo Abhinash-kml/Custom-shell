@@ -53,4 +53,6 @@ int main(int argc, char** argv)
     char* cmd2[] = {"grep", ".log", NULL};
 
     execute_commands(cmd1, cmd2);
+
+    getchar();
 }
