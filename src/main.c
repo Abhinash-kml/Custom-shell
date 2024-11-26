@@ -176,7 +176,6 @@ void AutoComplete(char* buffer, int* buffer_len)
     int len = strlen(buffer);
     char *last_word = findLastWord(buffer);
     size_t last_word_len = strlen(last_word);
-    //printf("\n");
 
     for (size_t i = 0; suggestions[i] != NULL; ++i)
         if (strncmp(last_word, suggestions[i], last_word_len) == 0)
@@ -184,22 +183,16 @@ void AutoComplete(char* buffer, int* buffer_len)
             size_t suggestion_len = strlen(suggestions[i]);
 
             // Replace last word with the suggestion
-            strcpy(last_word, suggestions[i]);
-
+            strcpy(last_word, suggestions[i]);          // This asshole copies nullterminator which wasted my 5 hrs today
+                                                        // Null terminator should not be copied in this case as printf stops printing as it encounters firse nullterminator
             // Update buffer length
             *buffer_len = strlen(buffer);
         }
 
-        // {
-        //     strcpy(buffer, suggestions[i]);
-        //     *buffer_len = strlen(suggestions[i]);
-        // }
+    buffer[*buffer_len] = ' ';              // Manually added random char for strcopy's nonsense
 
-            
-    //printf("\n%s", buffer); // Redisplay current input
-    //printf("%s", buffer); // Redisplay current input
     printf("\r\033[Kneo > %s", buffer);
-    //fflush(stdout);
+    fflush(stdout);
     return;
 }
 
