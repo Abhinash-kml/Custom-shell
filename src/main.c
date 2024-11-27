@@ -17,6 +17,7 @@ void DisableRawMode();
 char* findLastWord(char*) ;
 int get_index(char*, char);
 void AutoComplete(char*, int*);
+void removeNullTerminators(char*, size_t);
 
 void UpdateLoop();
 char* ReadLine();
@@ -128,13 +129,6 @@ char* ReadLine()
 
         if (character == '\t')
             AutoComplete(buffer, &position);
-        // else if (character == 10) // Enter key to execute command
-        // { 
-        //     buffer[position] = '\0';
-        //     printf("\nExecuting: %s\n> ", buffer);
-        //     position = 0;
-        //     memset(buffer, 0, bufferSize);
-        // } 
         else if (character == 127) // Backspace key
         { 
             if (position > 0) 
@@ -146,12 +140,11 @@ char* ReadLine()
         else if (character == EOF || character == '\n')
         {
             buffer[position] = '\0';
+            position = 0;
             return buffer;
         }
         else
-            buffer[position] = character;
-
-        position++;
+            buffer[position++] = character;
 
         if (position >= bufferSize)
         {
@@ -172,6 +165,21 @@ char* findLastWord(char *buffer) {
     return (last_space == NULL) ? buffer : last_space + 1;
 }
 
+void removeNullTerminators(char *arr, size_t length) {
+    size_t j = 0; // Index to track the position for valid characters
+
+    for (size_t i = 0; i < length; i++) {
+        if (arr[i] != '\0') {
+            arr[j++] = arr[i]; // Copy non-null characters to the next valid position
+        }
+    }
+
+    // Nullify the remaining part of the array for safety
+    while (j < length) {
+        arr[j++] = '\0';
+    }
+}
+
 void AutoComplete(char* buffer, int* buffer_len)
 {
     int len = strlen(buffer);
@@ -183,14 +191,20 @@ void AutoComplete(char* buffer, int* buffer_len)
         {
             // Replace last word with the suggestion
             strcpy(last_word, suggestions[i]);          // This asshole copies nullterminator which wasted my 5 hrs today
-
-            // Update buffer length
-            *buffer_len = strlen(buffer);
-                                                        // Null terminator should not be copied in this case as printf stops printing as it encounters firse nullterminator
-            buffer[*buffer_len] = ' ';                  // Manually added random char for strcopy's nonsense
-            break;
+            break;                                      // Null terminator should not be copied in this case as printf stops printing as it encounters firse nullterminator
         }
 
+    removeNullTerminators(buffer, strlen(buffer));      // This removes multiple null terminatos added by strcpy, which fixes printf's issue of not displaying the buffer properly
+
+    // Update buffer length
+    *buffer_len = strlen(buffer);
+
+    // Log the auto completes to the stream
+    char temp[500];
+    sprintf(temp, "buffer: %s\n", buffer);
+    fprintf(errorStream, temp);
+
+    // Clear the terminal till cursor and print the new buffer
     printf("\r\033[Kneo > %s", buffer);
     fflush(stdout);
     return;
@@ -241,7 +255,7 @@ char** SplitLine(char* line)
     }
 
     tokens[position] = NULL;
-
+    memset(line, 0, strlen(line) + 1);
     return tokens;
 }
 
