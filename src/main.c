@@ -7,87 +7,77 @@
 #include <time.h>
 #include <signal.h>
 #include <termios.h>
+#include <stdbool.h>
 
 #define TOKEN_BUFFER_SIZE 64
 #define TOKEN_DELIMITERS " \t\r\n\a"
 
-void GracefullShutdown(int);
-void EnableRawMode();
-void DisableRawMode();
-char* findLastWord(char*) ;
+void gracefully_shutdown(int);
+void enable_raw_mode();
+void disable_raw_mode();
+char* find_last_word(char*) ;
 int get_index(char*, char);
-void AutoComplete(char*, int*);
-void removeNullTerminators(char*, size_t);
+void auto_complete(char*, int*);
+void remove_null_terminators(char*, size_t);
 
-void UpdateLoop();
-char* ReadLine();
-char** SplitLine(char*);
-int Execute();
-int Launch(char** args);
+void update_loop();
+char* read_line();
+char** tokenize(char*);
+int execute(char**);
+int launch_command(char** args);
+int open_file_streams();
+void close_file_streams();
 
-int CommandCD(char** args);
-int CommandHelp(char** args);
-int CommandExit(char** args);
+int command_cd(char** args);
+int command_help(char** args);
+int command_exit(char** args);
 
-int NumFunctions(char** functions[]);
+int num_functions(char** functions[]);
 
-int (*builtinFunctions[])(char**) = {
-    &CommandCD,
-    &CommandHelp,
-    &CommandExit
+int (*builtin_functions[])(char**) = {
+    &command_cd,
+    &command_help,
+    &command_exit
 };
 
-char* commandOne[]   = {"cd", "Change Directory."};
-char* commandTwo[]   = {"help", "Show help about this shell."};
-char* commandThree[] = {"exit", "Exit the shell."};
+char* command_one[]   = {"cd", "Change Directory."};
+char* command_two[]   = {"help", "Show help about this shell."};
+char* command_three[] = {"exit", "Exit the shell."};
 
 char* suggestions[] = {"help", "hello", "history", "halt", "hack", NULL};
 
-char** builtinFunctionStrings[] = {
-    commandOne,
-    commandTwo,
-    commandThree
+char** builtin_function_strings[] = {
+    command_one,
+    command_two,
+    command_three
 };
 
-FILE* errorStream;
-FILE* recordStream;
-time_t currentTime;
-struct termios orig_termios;
+FILE* error_stream;
+FILE* history_stream;
+time_t current_time;
+struct termios original_termios;
 
 int main()
 {
-    errorStream = fopen("shell_errors.log", "a");
-    if (!errorStream)
-    {
-        printf("Error opening/creating error steam log");
+    int streams_opened = open_file_streams();
+    if (!streams_opened)
         return EXIT_FAILURE;
-    }
 
-    recordStream = fopen("shell_record.log", "a");
-    if (!recordStream)
-    {
-        printf("Error opening/creating record stream log");
-        return EXIT_FAILURE;
-    }
+    signal(SIGINT, gracefully_shutdown);
+    signal(SIGKILL, gracefully_shutdown);
+    signal(SIGTERM, gracefully_shutdown);
 
-    signal(SIGINT, GracefullShutdown);
-    signal(SIGKILL, GracefullShutdown);
-    signal(SIGTERM, GracefullShutdown);
-
-    EnableRawMode();
+    enable_raw_mode();
         
     printf("Welcome to Neo's terminal\n");
-    UpdateLoop();
+    update_loop();
 
-    if (errorStream)
-        fclose(errorStream);
-    if (recordStream)
-        fclose(recordStream);
+    close_file_streams();
 
-    DisableRawMode();
+    disable_raw_mode();
 }
 
-void UpdateLoop()
+void update_loop()
 {
     char* line;
     char** args;
@@ -95,14 +85,14 @@ void UpdateLoop()
 
     do {
         printf("neo > ");
-        line = ReadLine();
+        line = read_line();
 
-        currentTime = time(NULL);
-        if (currentTime != (time_t)(-1))
-            fprintf(recordStream, "%s - %s", line, asctime(gmtime(&currentTime)));
+        current_time = time(NULL);
+        if (current_time != (time_t)(-1))
+            fprintf(history_stream, "%s - %s", line, asctime(gmtime(&current_time)));
 
-        args = SplitLine(line);
-        status = Execute(args);
+        args = tokenize(line);
+        status = execute(args);
 
         free(line);
         free(args);
@@ -110,7 +100,7 @@ void UpdateLoop()
     while (status);
 }
 
-char* ReadLine()
+char* read_line()
 {
     int bufferSize = 246;
     int position = 0;
@@ -128,7 +118,7 @@ char* ReadLine()
         character = getchar();
 
         if (character == '\t')
-            AutoComplete(buffer, &position);
+            auto_complete(buffer, &position);
         else if (character == 127) // Backspace key
         { 
             if (position > 0) 
@@ -160,12 +150,12 @@ char* ReadLine()
     }
 }
 
-char* findLastWord(char *buffer) {
+char* find_last_word(char *buffer) {
     char *last_space = strrchr(buffer, ' '); // Find the last space
     return (last_space == NULL) ? buffer : last_space + 1;
 }
 
-void removeNullTerminators(char *arr, size_t length) {
+void remove_null_terminators(char *arr, size_t length) {
     size_t j = 0; // Index to track the position for valid characters
 
     for (size_t i = 0; i < length; i++) {
@@ -180,10 +170,10 @@ void removeNullTerminators(char *arr, size_t length) {
     }
 }
 
-void AutoComplete(char* buffer, int* buffer_len)
+void auto_complete(char* buffer, int* buffer_len)
 {
     int len = strlen(buffer);
-    char *last_word = findLastWord(buffer);
+    char *last_word = find_last_word(buffer);
     size_t last_word_len = strlen(last_word);
 
     for (size_t i = 0; suggestions[i] != NULL; ++i)
@@ -194,7 +184,7 @@ void AutoComplete(char* buffer, int* buffer_len)
             break;                                      // Null terminator should not be copied in this case as printf stops printing as it encounters firse nullterminator
         }
 
-    removeNullTerminators(buffer, strlen(buffer));      // This removes multiple null terminatos added by strcpy, which fixes printf's issue of not displaying the buffer properly
+    remove_null_terminators(buffer, strlen(buffer));      // This removes multiple null terminatos added by strcpy, which fixes printf's issue of not displaying the buffer properly
 
     // Update buffer length
     *buffer_len = strlen(buffer);
@@ -202,7 +192,7 @@ void AutoComplete(char* buffer, int* buffer_len)
     // Log the auto completes to the stream
     char temp[500];
     sprintf(temp, "buffer: %s\n", buffer);
-    fprintf(errorStream, temp);
+    fprintf(error_stream, temp);
 
     // Clear the terminal till cursor and print the new buffer
     printf("\r\033[Kneo > %s", buffer);
@@ -221,7 +211,7 @@ int get_index(char* arr, char c)
     return -1; // Return -1 if the character is not found
 }
 
-char** SplitLine(char* line)
+char** tokenize(char* line)
 {
     int buffSize = TOKEN_BUFFER_SIZE, position = 0;
     char** tokens = (char**)malloc(sizeof(char*) * buffSize);
@@ -229,7 +219,7 @@ char** SplitLine(char* line)
 
     if (!tokens)
     {
-        fprintf(stderr, "shell: allocation error in SplitLine()");
+        fprintf(stderr, "shell: allocation error in tokenize()");
         exit(EXIT_FAILURE);
     }
 
@@ -246,7 +236,7 @@ char** SplitLine(char* line)
 
             if (!tokens)
             {
-                fprintf(stderr, "shell: reallocation error in SplitLine()");
+                fprintf(stderr, "shell: reallocation error in tokenize()");
                 exit(EXIT_FAILURE);
             }
         }
@@ -259,21 +249,21 @@ char** SplitLine(char* line)
     return tokens;
 }
 
-int Execute(char** args)
+int execute(char** args)
 {
     if (args[0] == NULL)
         return 1;
 
-    for (size_t i = 0; i < NumFunctions(builtinFunctionStrings); ++i)
+    for (size_t i = 0; i < num_functions(builtin_function_strings); ++i)
     {
-        if (strcmp(args[0], builtinFunctionStrings[i][0]) == 0)
-            return builtinFunctions[i](args);
+        if (strcmp(args[0], builtin_function_strings[i][0]) == 0)
+            return builtin_functions[i](args);
     }
 
-    return Launch(args);
+    return launch_command(args);
 }
 
-int Launch(char** args)
+int launch_command(char** args)
 {
     pid_t pid, wpid;
     int status;
@@ -303,7 +293,7 @@ int Launch(char** args)
     return 1;
 }
 
-int NumFunctions(char** arr[])
+int num_functions(char** arr[])
 {
     int count = 0;
     while (arr[count] != NULL)
@@ -316,7 +306,7 @@ int NumFunctions(char** arr[])
   Builtin function implementations.
 */
 
-int CommandCD(char** args)
+int command_cd(char** args)
 {
     if (args[0] == NULL)
         fprintf(stderr, "shell: argument expected for \"cd\"\n");
@@ -329,50 +319,75 @@ int CommandCD(char** args)
     return 1;
 }
 
-int CommandHelp(char** args)
+int command_help(char** args)
 {
     printf("Neo's custom shell\n");
     printf("Type program names followed by arguments, then hit enter.\n");
     printf("The commands are prebuilt in this shell:\n");
 
-    for (size_t i = 0; i < NumFunctions(builtinFunctionStrings); ++i)
-        printf("  %s -- %s\n", builtinFunctionStrings[i][0], builtinFunctionStrings[i][1]);
+    for (size_t i = 0; i < num_functions(builtin_function_strings); ++i)
+        printf("  %s -- %s\n", builtin_function_strings[i][0], builtin_function_strings[i][1]);
 
     printf("Use the \"man\" command for information on other programs.\n");
 
     return 1;
 }
 
-int CommandExit(char** args)
+int command_exit(char** args)
 {
     return 0;
 }
 
-void GracefullShutdown(int signal)
+void gracefully_shutdown(int signal)
 {
     printf("Received signal: %i.\nShutting down...", signal);
 
-    if (errorStream)
-        fclose(errorStream);
+    if (error_stream)
+        fclose(error_stream);
     
-    if (recordStream)
-        fclose(recordStream);
+    if (history_stream)
+        fclose(history_stream);
 
     exit(EXIT_SUCCESS);
 }
 
-void EnableRawMode()
+void enable_raw_mode()
 {
     struct termios raw;
-    tcgetattr(STDIN_FILENO, &orig_termios);     // Get current terminal attributes
-    raw = orig_termios;
+    tcgetattr(STDIN_FILENO, &original_termios);     // Get current terminal attributes
+    raw = original_termios;
     //raw.c_lflag &= ~(ECHO | ICANON);            // disable canonical mode and echo
     raw.c_lflag &= ~ICANON;            // disable canonical mode and echo
 
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);   // Apply changes
 }
 
-void DisableRawMode()
+void disable_raw_mode()
 {
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);  // Restore original settings
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_termios);  // Restore original settings
+}
+
+int open_file_streams()
+{
+    history_stream = fopen("shell_record.log", "a");
+    if (!history_stream)
+    {
+        printf("Failed to open history file stream.\n");
+        return 0;
+    }
+
+    error_stream = fopen("shell_errors.log", "a");
+    if (!error_stream)
+    {
+        printf("Failed to open error file stream.\n");
+        return 0;
+    }
+}
+
+void close_file_streams()
+{
+    if (error_stream)
+        fclose(error_stream);
+    if (history_stream)
+        fclose(history_stream);
 }
